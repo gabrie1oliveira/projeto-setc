@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Retro Platformer 2D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ==========================================
+         CONTAINER DO JOGO
+    =========================================== -->
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+        <!-- HUD OVERLAY -->
+        <div id="hud-overlay">
+            <div class="hud-item">
+                <span class="hud-label">MARIO</span>
+                <span id="score-display" class="hud-value">000000</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-icon">🪙</span>
+                <span id="coins-display" class="hud-value">x00</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">WORLD</span>
+                <span id="level-display" class="hud-value">1-1</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-label">TIME</span>
+                <span id="time-display" class="hud-value">400</span>
+            </div>
+            <div class="hud-item">
+                <span class="hud-icon">❤️</span>
+                <span id="lives-display" class="hud-value">x3</span>
+            </div>
+        </div>
+
+        <!-- POWER-UP INDICATOR -->
+        <div id="power-indicator">
+            <span id="power-display">SMALL</span>
+        </div>
+
+        <!-- OVERLAY DE MENSAGEM (transições, pausa, etc.) -->
+        <div id="overlay-message" class="hidden">
+            <div id="overlay-content"></div>
+        </div>
+    </div>
+
+    <!-- CONTROLES -->
+    <div id="controls-info">
+        <p>
+            <span class="key">←</span>
+            <span class="key">→</span> Mover &nbsp;|&nbsp;
+            <span class="key">Z</span> / <span class="key">Espaço</span> Pular &nbsp;|&nbsp;
+            <span class="key">X</span> Atirar &nbsp;|&nbsp;
+            <span class="key">P</span> Pausa &nbsp;|&nbsp;
+            <span class="key">R</span> Reiniciar
+        </p>
+    </div>
+
+    <!-- ==========================================
+         SCRIPTS (ordem importa!)
+    =========================================== -->
+    <script src="config.js"></script>
+    <script src="utils.js"></script>
+    <script src="sounds.js"></script>
+    <script src="save.js"></script>
+    <script src="effects.js"></script>
+    <script src="levels.js"></script>
+    <script src="items.js"></script>
+    <script src="player.js"></script>
+    <script src="enemies.js"></script>
+    <script src="bosses.js"></script>
+    <script src="menu.js"></script>
+    <script src="ui.js"></script>
+    <script src="game.js"></script>
+
+</body>
+</html>
