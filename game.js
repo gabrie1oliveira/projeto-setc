@@ -2,47 +2,34 @@
  * ============================================================
  * GAME.JS
  * ------------------------------------------------------------
- * Motor principal do jogo. Orquestra tudo:
- *   - Game loop (requestAnimationFrame + deltaTime)
- *   - Carregamento e transição de fases
- *   - Câmera com suavização (lerp) e screen shake
- *   - Colisões player × inimigos × itens × fireballs
- *   - Timer, vidas, score, game over, vitória
- *   - Fundo com parallax
- *   - Input handling
- *   - Save automático
- *
- * v1.1 — Correções:
- *   - drawPipes() alinhado (aro/corpo/sombra/brilho)
- *   - drawPipeText() novo — desenha "vai ds" nos tubos
- *   - Colisão com tubos usa altura real (via player.js)
- *   - checkBossPlayerCollision chamado só quando boss vivo
+ * v1.8 — Power-ups corrigidos (mushroom/fireflower funcionam)
+ *   - loadLevel sincroniza levelData.items com this.items
+ *   - updatePlaying faz loop em levelData.items (mesma ref)
+ *   - Crédito no canto
+ *   - Game Over reseta para 1-1
+ *   - Boss ativa ao se aproximar
  * ============================================================
  */
 "use strict";
 
 class Game {
     constructor() {
-        /* Canvas */
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.width = this.canvas.width;
         this.height = this.canvas.height;
 
-        /* Estado */
         this.state = 'MENU';
         this.running = false;
         this.paused = false;
         this.gameOver = false;
 
-        /* Progresso */
         this.currentStage = 1;
         this.score = 0;
         this.coins = 0;
         this.timeLeft = CONFIG.GAME.START_TIME;
         this.timeAccumulator = 0;
 
-        /* Entidades */
         this.player = null;
         this.enemies = [];
         this.boss = null;
@@ -51,74 +38,48 @@ class Game {
         this.coins_entities = [];
         this.levelData = null;
 
-        /* Câmera */
         this.cameraX = 0;
         this.cameraShakeX = 0;
         this.cameraShakeY = 0;
 
-        /* Intro de fase */
         this.introTimer = 0;
         this.introDuration = 2.5;
 
-        /* Level clear */
         this.levelClearTimer = 0;
         this.levelClearDuration = 3.0;
 
-        /* Combo */
         this.combo = 0;
         this.comboTimer = 0;
 
-        /* Input */
         this.keys = {};
         this.keysPressedThisFrame = {};
 
-        /* FPS */
         this.fps = Utils.createFpsCounter();
-
-        /* Autosave */
         this.autosaveTimer = 0;
-
-        /* Último timestamp */
         this.lastTime = performance.now();
-
-        /* Play time acumulado */
         this.playTimeAccumulator = 0;
 
-        /* Inicializa */
         UI.init();
         this.initControls();
         this.initAudioUnlock();
 
-        /* Estado inicial: menu */
         MenuManager.setState('MAIN_MENU');
 
-        /* Loop */
         requestAnimationFrame((t) => this.gameLoop(t));
-
-        /* Autosave a cada 15s */
         setInterval(() => this.autosave(), 15000);
-
-        /* Salva ao sair */
         window.addEventListener('beforeunload', () => this.autosave());
     }
 
     /* ========================================================
        INPUT
     ======================================================== */
-
     initControls() {
         window.addEventListener('keydown', (e) => {
-            if ([
-                'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-            ].includes(e.code)) {
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
                 e.preventDefault();
             }
-
-            if (!this.keys[e.code]) {
-                this.keysPressedThisFrame[e.code] = true;
-            }
+            if (!this.keys[e.code]) this.keysPressedThisFrame[e.code] = true;
             this.keys[e.code] = true;
-
             this.handleHotkeys(e.code);
         });
 
@@ -128,9 +89,7 @@ class Game {
 
         window.addEventListener('blur', () => {
             this.keys = {};
-            if (this.state === 'PLAYING') {
-                this.pause();
-            }
+            if (this.state === 'PLAYING') this.pause();
         });
     }
 
@@ -171,33 +130,46 @@ class Game {
     }
 
     /* ========================================================
-       CONTROLE DE FLUXO
+       FLUXO
     ======================================================== */
-
     startNewGame() {
+        const data = SAVE.get();
+        data.player.lives = CONFIG.PLAYER.START_LIVES;
+        data.player.coins = 0;
+        data.player.score = 0;
+        data.player.powerState = 'small';
+        data.player.currentLevel = 1;
+        data.progress.unlockedLevel = 1;
+        SAVE.save(data);
+
         this.currentStage = 1;
         this.score = 0;
         this.coins = 0;
         this.player = null;
         this.playTimeAccumulator = 0;
+
         this.loadLevel(this.currentStage);
         this.startLevelIntro();
     }
 
     continueFromSave() {
-        const data = SAVE.get();
+        const data = SAVE.validate();
+
         this.currentStage = data.player.currentLevel || 1;
         this.score = data.player.score || 0;
         this.coins = data.player.coins || 0;
+
         this.loadLevel(this.currentStage);
 
         if (this.player && data.player.powerState) {
             this.player.powerState = data.player.powerState;
             if (data.player.powerState !== 'small') {
                 this.player.height = CONFIG.PLAYER.HEIGHT_BIG;
-                this.player.y -= (CONFIG.PLAYER.HEIGHT_BIG - CONFIG.PLAYER.HEIGHT_SMALL);
+                const spawnY = this.levelData.groundY - this.player.height - 4;
+                this.player.y = spawnY;
             }
         }
+
         this.startLevelIntro();
     }
 
@@ -255,30 +227,46 @@ class Game {
         MenuManager.setState('GAME_OVER');
         SoundManager.stopMusic();
         SoundManager.playGameOver();
+
+        const data = SAVE.get();
+        data.player.lives = CONFIG.PLAYER.START_LIVES;
+        data.player.coins = 0;
+        data.player.score = 0;
+        data.player.powerState = 'small';
+        data.player.currentLevel = 1;
+        data.progress.unlockedLevel = 1;
+        SAVE.save(data);
     }
 
     startLevelIntro() {
         this.state = 'LEVEL_INTRO';
         this.introTimer = this.introDuration;
 
+        const spawnY = this.levelData.groundY - CONFIG.PLAYER.HEIGHT_SMALL - 4;
+
         if (!this.player) {
-            this.player = new Player(80, 200);
+            this.player = new Player(80, spawnY);
             this.player.lives = SAVE.get().player.lives;
         } else {
             this.player.x = 80;
-            this.player.y = 200;
+            this.player.y = spawnY;
             this.player.vx = 0;
             this.player.vy = 0;
             this.player.dead = false;
+            this.player.deadTimer = 0;
+            this.player.isGrounded = true;
+            this.player.powerState = 'small';
+            this.player.height = CONFIG.PLAYER.HEIGHT_SMALL;
+            this.player.starActive = false;
+            this.player.invulnerable = false;
         }
 
         SoundManager.startMusic(this.levelData.theme);
     }
 
     /* ========================================================
-       CARREGAMENTO DE FASE
+       CARREGAR FASE
     ======================================================== */
-
     loadLevel(stageId) {
         this.levelData = WorldManager.getLevel(stageId);
         this.currentStage = stageId;
@@ -290,8 +278,7 @@ class Game {
         this.boss = null;
 
         for (const e of this.levelData.enemies) {
-            const enemy = new Enemy(e.x, e.y, e.minX, e.maxX, e.type);
-            this.enemies.push(enemy);
+            this.enemies.push(new Enemy(e.x, e.y, e.minX, e.maxX, e.type));
         }
 
         for (const c of this.levelData.coins) {
@@ -310,35 +297,30 @@ class Game {
             this.boss = new Boss(bs.x, bs.y, bs.minX, bs.maxX);
         }
 
-        this.cameraX = 0;
+        /* ⚠️ Sincroniza referências: player escreve em levelData.items */
+        this.levelData.items = this.items;
 
+        this.cameraX = 0;
         this.timeLeft = CONFIG.GAME.START_TIME;
         this.timeAccumulator = 0;
-
         this.combo = 0;
         this.comboTimer = 0;
 
         EffectsManager.clear();
-
         UI.setLives(this.player ? this.player.lives : SAVE.get().player.lives);
     }
 
     /* ========================================================
-       LOOP PRINCIPAL
+       LOOP
     ======================================================== */
-
     gameLoop(currentTime) {
-        const dt = Math.min(
-            (currentTime - this.lastTime) / 1000,
-            CONFIG.CANVAS.MAX_DELTA
-        );
+        const dt = Math.min((currentTime - this.lastTime) / 1000, CONFIG.CANVAS.MAX_DELTA);
         this.lastTime = currentTime;
 
         this.update(dt);
         this.draw();
 
         this.keysPressedThisFrame = {};
-
         requestAnimationFrame((t) => this.gameLoop(t));
     }
 
@@ -351,13 +333,10 @@ class Game {
         }
 
         switch (this.state) {
-            case 'LEVEL_INTRO':   this.updateLevelIntro(dt); break;
-            case 'PLAYING':       this.updatePlaying(dt); break;
-            case 'LEVEL_CLEAR':   this.updateLevelClear(dt); break;
-            case 'VICTORY':       this.updateVictory(dt); break;
-            case 'GAME_OVER':     break;
-            case 'PAUSED':        break;
-            case 'MENU':          break;
+            case 'LEVEL_INTRO': this.updateLevelIntro(dt); break;
+            case 'PLAYING':     this.updatePlaying(dt); break;
+            case 'LEVEL_CLEAR': this.updateLevelClear(dt); break;
+            case 'VICTORY':     this.updateVictory(dt); break;
         }
 
         this.fps.tick();
@@ -403,9 +382,7 @@ class Game {
     }
 
     updateVictory(dt) {
-        if (Math.random() < 0.1) {
-            EffectsManager.emitConfetti(3);
-        }
+        if (Math.random() < 0.1) EffectsManager.emitConfetti(3);
     }
 
     updatePlaying(dt) {
@@ -414,12 +391,7 @@ class Game {
         if (this.timeAccumulator >= 1) {
             this.timeAccumulator -= 1;
             this.timeLeft -= 1;
-
-            if (this.timeLeft <= 0) {
-                this.player.kill();
-                return;
-            }
-
+            if (this.timeLeft <= 0) { this.player.kill(); return; }
             if (this.timeLeft === 30) SoundManager.playMenuSelect();
         }
 
@@ -427,28 +399,28 @@ class Game {
         this.player.update(dt, this.keys, this.levelData, this.fireballs);
 
         /* Inimigos */
-        for (const enemy of this.enemies) {
-            enemy.update(dt, this.levelData);
-        }
+        for (const enemy of this.enemies) enemy.update(dt, this.levelData);
 
-        /* Boss — só atualiza/colide se estiver vivo */
+        /* Boss */
         if (this.boss && this.boss.isAlive) {
             this.boss.update(dt, this.levelData, this.player.x);
-            if (!this.boss.stomped) {
+            if (this.boss.active && !this.boss.stomped) {
                 this.checkBossPlayerCollision();
+                this.checkBossFireballPlayerCollisions();
             }
         }
 
-        /* Fireballs do jogador */
+        /* Fireballs */
         for (let i = this.fireballs.length - 1; i >= 0; i--) {
             const fb = this.fireballs[i];
             fb.update(dt, this.levelData);
             if (!fb.active) Utils.removeAt(this.fireballs, i);
         }
 
-        /* Itens */
-        for (let i = this.items.length - 1; i >= 0; i--) {
-            const item = this.items[i];
+        /* ===== ITENS (power-ups) — usa levelData.items ===== */
+        const items = this.levelData.items;
+        for (let i = items.length - 1; i >= 0; i--) {
+            const item = items[i];
             item.update(dt, this.levelData);
 
             if (!item.collected && Utils.aabb(this.player, item)) {
@@ -459,9 +431,19 @@ class Game {
                 if (item.type === 'star') {
                     EffectsManager.flashScreen('#FFD700', 0.5);
                 }
+
+                EffectsManager.text(
+                    this.player.x + 12,
+                    this.player.y - 20,
+                    item.type === 'mushroom' ? 'GIGANTE!' :
+                    item.type === 'fireflower' ? 'FOGO!' : 'STAR!',
+                    { color: '#FFD700', size: 10, life: 1.0 }
+                );
             }
 
-            if (item.collected) Utils.removeAt(this.items, i);
+            if (item.collected || !item.active) {
+                Utils.removeAt(items, i);
+            }
         }
 
         /* Moedas */
@@ -474,11 +456,9 @@ class Game {
                 this.addCoin(1);
                 this.addScore(CONFIG.SCORE.COIN);
                 SoundManager.playCoin();
-
                 EffectsManager.textScore(c.x + 8, c.y - 5, CONFIG.SCORE.COIN);
                 EffectsManager.emitSparkles(c.x + 8, c.y + 8, 6, '#FFD700');
             }
-
             if (c.collected) Utils.removeAt(this.coins_entities, i);
         }
 
@@ -486,19 +466,12 @@ class Game {
         this.checkPlayerEnemyCollisions();
         this.checkFireballEnemyCollisions();
         this.checkFireballBossCollisions();
-
-        if (this.boss) {
-            this.checkBossFireballPlayerCollisions();
-        }
-
         this.checkFlagCollision();
 
         /* Player morreu */
         if (this.player.dead) {
             this.player.deadTimer = (this.player.deadTimer || 0) + dt;
-            if (this.player.deadTimer > 1.5) {
-                this.handlePlayerDeathResolved();
-            }
+            if (this.player.deadTimer > 1.5) this.handlePlayerDeathResolved();
         }
 
         this.updateCamera(dt);
@@ -508,19 +481,15 @@ class Game {
     /* ========================================================
        COLISÕES
     ======================================================== */
-
     checkPlayerEnemyCollisions() {
         const p = this.player;
         if (p.dead) return;
 
         for (const enemy of this.enemies) {
-            if (!enemy.isAlive) continue;
-            if (enemy.stomped) continue;
+            if (!enemy.isAlive || enemy.stomped) continue;
             if (!Utils.aabb(p, enemy)) continue;
 
-            const fallingOnTop =
-                p.vy > 0 &&
-                p.y + p.height - p.vy <= enemy.y + 12;
+            const fallingOnTop = p.vy > 0 && p.y + p.height - p.vy <= enemy.y + 12;
 
             if (p.isStarPowered) {
                 enemy.stomped = true;
@@ -531,49 +500,32 @@ class Game {
 
             if (fallingOnTop) {
                 const result = enemy.stomp();
-
-                if (result.killed) {
-                    this.onEnemyKilled(enemy);
-                }
+                if (result.killed) this.onEnemyKilled(enemy);
 
                 if (result.shell) {
                     p.vy = CONFIG.ENEMY.STOMP_BOUNCE;
-                    EffectsManager.text(
-                        enemy.x + 12, enemy.y - 10,
+                    EffectsManager.text(enemy.x + 12, enemy.y - 10,
                         result.kick ? 'KICK!' : 'CASCO!',
-                        { color: '#4CAF50', size: 10, life: 0.8 }
-                    );
+                        { color: '#4CAF50', size: 10, life: 0.8 });
                 } else {
                     p.vy = CONFIG.ENEMY.STOMP_BOUNCE;
                 }
-
-                EffectsManager.emitDust(
-                    enemy.x + enemy.width / 2,
-                    enemy.y + enemy.height,
-                    4
-                );
+                EffectsManager.emitDust(enemy.x + enemy.width / 2, enemy.y + enemy.height, 4);
             } else {
-                if (enemy.isShell && enemy.isShellMoving) {
-                    p.takeDamage();
-                } else if (!enemy.isShell) {
-                    p.takeDamage();
-                } else if (enemy.isShell && !enemy.isShellMoving) {
+                if (enemy.isShell && enemy.isShellMoving) p.takeDamage();
+                else if (!enemy.isShell) p.takeDamage();
+                else if (enemy.isShell && !enemy.isShellMoving) {
                     const result = enemy.stomp();
-                    if (result.kick) {
-                        p.vy = CONFIG.ENEMY.STOMP_BOUNCE * 0.6;
-                    }
+                    if (result.kick) p.vy = CONFIG.ENEMY.STOMP_BOUNCE * 0.6;
                 }
             }
         }
 
         for (const shell of this.enemies) {
             if (!shell.isShell || !shell.isShellMoving || !shell.isAlive) continue;
-
             for (const other of this.enemies) {
-                if (other === shell || !other.isAlive) continue;
-                if (other.stomped) continue;
+                if (other === shell || !other.isAlive || other.stomped) continue;
                 if (!Utils.aabb(shell, other)) continue;
-
                 other.stomped = true;
                 other.stompTimer = 0.3;
                 this.onEnemyKilled(other);
@@ -593,11 +545,7 @@ class Game {
 
                 fb.active = false;
                 const killed = enemy.hitByFireball();
-
-                if (killed) {
-                    this.onEnemyKilled(enemy);
-                }
-
+                if (killed) this.onEnemyKilled(enemy);
                 EffectsManager.emitExplosion(fb.x + 5, fb.y + 5, '#FF6D00');
                 Utils.removeAt(this.fireballs, i);
                 break;
@@ -607,21 +555,16 @@ class Game {
 
     checkFireballBossCollisions() {
         if (!this.boss || !this.boss.isAlive || this.boss.stomped) return;
+        if (!this.boss.active) return;
 
         for (let i = this.fireballs.length - 1; i >= 0; i--) {
             const fb = this.fireballs[i];
-            if (!fb.active) continue;
-            if (!Utils.aabb(fb, this.boss)) continue;
+            if (!fb.active || !Utils.aabb(fb, this.boss)) continue;
 
             fb.active = false;
             const result = this.boss.hitByFireball();
-
-            if (result.killed) {
-                this.onBossKilled();
-            } else {
-                this.addScore(CONFIG.SCORE.BOSS_HIT);
-            }
-
+            if (result.killed) this.onBossKilled();
+            else this.addScore(CONFIG.SCORE.BOSS_HIT);
             Utils.removeAt(this.fireballs, i);
         }
     }
@@ -633,9 +576,7 @@ class Game {
 
         for (let i = this.boss.fireballs.length - 1; i >= 0; i--) {
             const fb = this.boss.fireballs[i];
-            if (!fb.active) continue;
-            if (!Utils.aabb(p, fb)) continue;
-
+            if (!fb.active || !Utils.aabb(p, fb)) continue;
             fb.active = false;
             p.takeDamage();
             Utils.removeAt(this.boss.fireballs, i);
@@ -644,54 +585,35 @@ class Game {
 
     checkBossPlayerCollision() {
         if (!this.boss || !this.boss.isAlive || this.boss.stomped) return;
+        if (!this.boss.active) return;
         const p = this.player;
-        if (p.dead) return;
+        if (p.dead || !Utils.aabb(p, this.boss)) return;
 
-        if (!Utils.aabb(p, this.boss)) return;
-
-        const fallingOnTop =
-            p.vy > 0 &&
-            p.y + p.height - p.vy <= this.boss.y + 16;
+        const fallingOnTop = p.vy > 0 && p.y + p.height - p.vy <= this.boss.y + 16;
 
         if (fallingOnTop && !p.invulnerable) {
             const result = this.boss.stomp();
             p.vy = CONFIG.ENEMY.STOMP_BOUNCE * 1.2;
-
-            if (result.killed) {
-                this.onBossKilled();
-            } else {
-                this.addScore(CONFIG.SCORE.BOSS_HIT);
-            }
-
+            if (result.killed) this.onBossKilled();
+            else this.addScore(CONFIG.SCORE.BOSS_HIT);
             EffectsManager.shake(10, 0.4);
             return;
         }
 
-        if (!this.boss.stomped) {
-            p.takeDamage();
-        }
+        if (!this.boss.stomped) p.takeDamage();
     }
 
     checkFlagCollision() {
         const flag = this.levelData.platforms.find(p => p.type === 'flagpole');
         if (!flag) return;
 
-        const flagRect = {
-            x: flag.x - 8,
-            y: flag.y,
-            width: flag.width + 16,
-            height: flag.height,
-        };
-
-        if (Utils.aabb(this.player, flagRect)) {
-            this.onLevelComplete();
-        }
+        const flagRect = { x: flag.x - 8, y: flag.y, width: flag.width + 16, height: flag.height };
+        if (Utils.aabb(this.player, flagRect)) this.onLevelComplete();
     }
 
     /* ========================================================
        EVENTOS
     ======================================================== */
-
     onEnemyKilled(enemy) {
         this.addScore(CONFIG.SCORE.ENEMY);
         this.combo++;
@@ -699,23 +621,13 @@ class Game {
 
         const comboBonus = Math.max(0, (this.combo - 1)) * 100;
         const total = CONFIG.SCORE.ENEMY + comboBonus;
-        if (comboBonus > 0) {
-            this.addScore(comboBonus);
-        }
+        if (comboBonus > 0) this.addScore(comboBonus);
 
-        EffectsManager.textScore(
-            enemy.x + enemy.width / 2,
-            enemy.y - 5,
-            total,
-            this.combo >= 3 ? '#FF2A6D' : '#FFD700'
-        );
+        EffectsManager.textScore(enemy.x + enemy.width / 2, enemy.y - 5, total,
+            this.combo >= 3 ? '#FF2A6D' : '#FFD700');
 
         if (this.combo >= 3) {
-            EffectsManager.textCombo(
-                enemy.x + enemy.width / 2,
-                enemy.y - 25,
-                this.combo
-            );
+            EffectsManager.textCombo(enemy.x + enemy.width / 2, enemy.y - 25, this.combo);
         }
 
         const stats = SAVE.getStats();
@@ -724,14 +636,16 @@ class Game {
 
     onBossKilled() {
         this.addScore(CONFIG.SCORE.BOSS_KILL);
-        EffectsManager.text(
-            this.boss.x + this.boss.width / 2,
-            this.boss.y - 20,
-            'BOSS DERROTADO!',
-            { color: '#FFD700', size: 14, life: 2.5 }
-        );
+        EffectsManager.text(this.boss.x + this.boss.width / 2, this.boss.y - 20,
+            'BOSS DERROTADO!', { color: '#FFD700', size: 14, life: 2.5 });
         EffectsManager.flashScreen('#FFD700', 0.5);
         SoundManager.playVictory();
+    }
+
+    onBossDefeated() {
+        setTimeout(() => {
+            if (this.state === 'PLAYING') this.onLevelComplete();
+        }, 1500);
     }
 
     onPlayerDeath() {
@@ -746,10 +660,12 @@ class Game {
         if (lives <= 0) {
             this.gameOverSequence();
         } else {
+            const spawnY = this.levelData.groundY - CONFIG.PLAYER.HEIGHT_SMALL - 4;
+
             this.player.dead = false;
             this.player.deadTimer = 0;
             this.player.x = 80;
-            this.player.y = 200;
+            this.player.y = spawnY;
             this.player.vx = 0;
             this.player.vy = 0;
             this.player.powerState = 'small';
@@ -765,35 +681,24 @@ class Game {
 
     onLevelComplete() {
         if (this.state !== 'PLAYING') return;
-
         this.state = 'LEVEL_CLEAR';
         this.levelClearTimer = this.levelClearDuration;
         this.running = false;
 
         SoundManager.stopMusic();
         SoundManager.playStageClear();
-
-        EffectsManager.text(
-            this.player.x + 12,
-            this.player.y - 20,
-            'FASE COMPLETA!',
-            { color: '#4CAF50', size: 16, life: 2.5 }
-        );
+        EffectsManager.text(this.player.x + 12, this.player.y - 20, 'FASE COMPLETA!',
+            { color: '#4CAF50', size: 16, life: 2.5 });
     }
 
     /* ========================================================
-       SCORE / COINS / HUD
+       SCORE / COINS / HUD / CAMERA
     ======================================================== */
-
-    addScore(n) {
-        this.score += n;
-        SAVE.addScore(n);
-    }
+    addScore(n) { this.score += n; SAVE.addScore(n); }
 
     addCoin(n = 1) {
         this.coins += n;
-        const newCoins = SAVE.addCoins(n);
-        this.coins = newCoins;
+        this.coins = SAVE.addCoins(n);
     }
 
     updateHUD() {
@@ -810,7 +715,6 @@ class Game {
     updateCamera(dt) {
         const targetX = this.player.x + this.player.vx * 10 - this.width / 3;
         this.cameraX += (targetX - this.cameraX) * CONFIG.CAMERA.FOLLOW_SPEED;
-
         const maxX = Math.max(0, this.levelData.length - this.width);
         this.cameraX = Utils.clamp(this.cameraX, 0, maxX);
 
@@ -818,10 +722,6 @@ class Game {
         this.cameraShakeX = shake.x;
         this.cameraShakeY = shake.y;
     }
-
-    /* ========================================================
-       AUTOSAVE
-    ======================================================== */
 
     autosave() {
         if (this.state !== 'PLAYING' && this.state !== 'PAUSED') return;
@@ -838,7 +738,6 @@ class Game {
     /* ========================================================
        DRAW
     ======================================================== */
-
     draw() {
         const ctx = this.ctx;
 
@@ -847,30 +746,48 @@ class Game {
 
         this.drawBackground(ctx);
 
-        if (
-            this.state === 'PLAYING' ||
-            this.state === 'PAUSED' ||
-            this.state === 'LEVEL_CLEAR' ||
-            this.state === 'LEVEL_INTRO'
-        ) {
+        if (this.state === 'PLAYING' || this.state === 'PAUSED' ||
+            this.state === 'LEVEL_CLEAR' || this.state === 'LEVEL_INTRO') {
             this.drawWorld(ctx);
         }
 
         ctx.restore();
 
         if (this.state === 'LEVEL_INTRO') {
-            MenuManager.drawLevelIntro(
-                ctx, this.width, this.height,
-                this.levelData.name,
-                this.introTimer,
-                this.introDuration
-            );
+            MenuManager.drawLevelIntro(ctx, this.width, this.height,
+                this.levelData.name, this.introTimer, this.introDuration);
         } else {
             MenuManager.draw(ctx, this.width, this.height);
         }
 
         EffectsManager.drawOverlay(ctx);
         UI.drawFpsCounter(ctx, this.fps.value);
+        this.drawCredit(ctx);
+    }
+
+    drawCredit(ctx) {
+        ctx.save();
+        const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 800);
+        ctx.font = 'bold 7px "Press Start 2P", monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+
+        const x = this.width - 8;
+        const y = this.height - 6;
+        const text = 'Feito por Gabriel Oliveira Rocha';
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+        ctx.fillText(text, x + 1, y + 1);
+
+        ctx.shadowBlur = 6 * pulse;
+        ctx.shadowColor = '#FFD700';
+        ctx.fillStyle = `rgba(255, 215, 0, ${0.7 + 0.3 * pulse})`;
+        ctx.fillText(text, x, y);
+
+        ctx.shadowBlur = 0;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.restore();
     }
 
     drawBackground(ctx) {
@@ -884,7 +801,6 @@ class Game {
         }
 
         const theme = CONFIG.THEMES[this.levelData.theme] || CONFIG.THEMES.overworld;
-
         const g = ctx.createLinearGradient(0, 0, 0, this.height);
         g.addColorStop(0, theme.bgTop);
         g.addColorStop(1, theme.bgBottom);
@@ -969,25 +885,11 @@ class Game {
         this.drawPipes(ctx);
         this.drawCoins(ctx);
 
-        for (const item of this.items) {
-            item.draw(ctx, this.cameraX);
-        }
-
-        for (const fb of this.fireballs) {
-            fb.draw(ctx, this.cameraX);
-        }
-
-        for (const enemy of this.enemies) {
-            enemy.draw(ctx, this.cameraX);
-        }
-
-        if (this.boss) {
-            this.boss.draw(ctx, this.cameraX);
-        }
-
-        if (this.player) {
-            this.player.draw(ctx, this.cameraX);
-        }
+        for (const item of this.levelData.items) item.draw(ctx, this.cameraX);
+        for (const fb of this.fireballs) fb.draw(ctx, this.cameraX);
+        for (const enemy of this.enemies) enemy.draw(ctx, this.cameraX);
+        if (this.boss) this.boss.draw(ctx, this.cameraX);
+        if (this.player) this.player.draw(ctx, this.cameraX);
 
         EffectsManager.draw(ctx, this.cameraX);
         UI.drawTimeWarning(ctx, this.timeLeft);
@@ -1000,15 +902,14 @@ class Game {
         const gy = this.levelData.groundY;
         const len = this.levelData.length;
 
-        const startX = Math.floor(this.cameraX / tile) * tile;
-        const endX = startX + this.width + tile;
+        const startTile = Math.floor(this.cameraX / tile);
+        const endTile = Math.ceil((this.cameraX + this.width) / tile) + 1;
 
-        for (let x = startX; x < endX; x += tile) {
+        for (let i = startTile; i < endTile; i++) {
+            const x = i * tile;
             if (x < 0 || x >= len) continue;
 
-            const inGap = this.levelData.gaps.some(g =>
-                x >= g.x && x < g.x + g.width
-            );
+            const inGap = this.levelData.gaps.some(g => x >= g.x && x < g.x + g.width);
             if (inGap) continue;
 
             const sx = x - this.cameraX;
@@ -1016,16 +917,19 @@ class Game {
             ctx.fillStyle = theme.ground;
             ctx.fillRect(sx, gy, tile, 8);
 
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fillRect(sx, gy, tile, 2);
+
             ctx.fillStyle = theme.groundBody;
             ctx.fillRect(sx, gy + 8, tile, this.height - gy - 8);
 
-            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(sx, gy + 16);
-            ctx.lineTo(sx + tile, gy + 16);
+            ctx.moveTo(sx, gy + 20);
+            ctx.lineTo(sx + tile, gy + 20);
             ctx.moveTo(sx + tile / 2, gy + 8);
-            ctx.lineTo(sx + tile / 2, gy + 16);
+            ctx.lineTo(sx + tile / 2, gy + 20);
             ctx.stroke();
         }
     }
@@ -1038,17 +942,13 @@ class Game {
             switch (p.type) {
                 case 'brick':
                 case 'used':
-                    this.drawBrick(ctx, sx, p);
-                    break;
+                    this.drawBrick(ctx, sx, p); break;
                 case 'question':
-                    this.drawQuestionBlock(ctx, sx, p);
-                    break;
+                    this.drawQuestionBlock(ctx, sx, p); break;
                 case 'flagpole':
-                    this.drawFlagpole(ctx, sx, p);
-                    break;
+                    this.drawFlagpole(ctx, sx, p); break;
                 case 'castle':
-                    this.drawCastle(ctx, sx, p);
-                    break;
+                    this.drawCastle(ctx, sx, p); break;
                 default:
                     ctx.fillStyle = CONFIG.COLORS.BRICK;
                     ctx.fillRect(sx, p.y, p.width, p.height);
@@ -1168,115 +1068,87 @@ class Game {
         ctx.fill();
     }
 
-    /* ========================================================
-       TUBOS (v1.1 — corrigido + texto "vai ds")
-    ======================================================== */
-
     drawPipes(ctx) {
         for (const p of this.levelData.pipes) {
             const sx = p.x - this.cameraX;
-            if (sx + p.width < 0 || sx > this.width) continue;
+            if (sx + p.width + 16 < 0 || sx - 8 > this.width) continue;
 
             const h = p.height ?? 96;
+            const pipeColor = CONFIG.THEMES[this.levelData.theme]?.pipe || CONFIG.COLORS.PIPE;
 
-            /* ====== CORPO DO TUBO ====== */
-            const pipeColor = CONFIG.THEMES[this.levelData.theme]?.pipe
-                || CONFIG.COLORS.PIPE;
+            const aroX = sx - 4;
+            const aroY = p.y;
+            const aroW = p.width + 8;
+            const aroH = 14;
 
-            /* Corpo (do aro até o chão) */
             ctx.fillStyle = pipeColor;
-            ctx.fillRect(sx, p.y + 20, p.width, h - 20);
+            ctx.fillRect(aroX, aroY, aroW, aroH);
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(aroX + aroW - 8, aroY, 8, aroH);
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            ctx.fillRect(aroX + 2, aroY + 2, 5, aroH - 4);
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(aroX + 0.5, aroY + 0.5, aroW - 1, aroH - 1);
 
-            /* Topo (aro maior) */
-            ctx.fillRect(sx - 4, p.y, p.width + 8, 20);
+            const bodyX = sx;
+            const bodyY = p.y + aroH;
+            const bodyW = p.width;
+            const bodyH = h - aroH;
 
-            /* ====== SOMBREAMENTO ====== */
-            /* Sombra direita do corpo */
-            ctx.fillStyle = 'rgba(0,0,0,0.25)';
-            ctx.fillRect(sx + p.width - 12, p.y + 20, 12, h - 20);
+            ctx.fillStyle = pipeColor;
+            ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(bodyX + bodyW - 8, bodyY, 8, bodyH);
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            ctx.fillRect(bodyX + 2, bodyY, 5, bodyH);
 
-            /* Sombra direita do aro */
-            ctx.fillRect(sx + p.width + 2, p.y + 2, 6, 16);
-
-            /* Brilho esquerdo do corpo */
-            ctx.fillStyle = 'rgba(255,255,255,0.25)';
-            ctx.fillRect(sx + 4, p.y + 22, 6, h - 24);
-
-            /* Brilho esquerdo do aro */
-            ctx.fillRect(sx - 2, p.y + 2, 6, 16);
-
-            /* ====== BORDAS ====== */
-            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-            ctx.lineWidth = 1;
-
-            /* Borda do aro */
-            ctx.strokeRect(sx - 4.5, p.y + 0.5, p.width + 9, 20);
-
-            /* Borda do corpo */
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.moveTo(sx + 0.5, p.y + 20);
-            ctx.lineTo(sx + 0.5, p.y + h);
-            ctx.moveTo(sx + p.width - 0.5, p.y + 20);
-            ctx.lineTo(sx + p.width - 0.5, p.y + h);
+            ctx.moveTo(bodyX + 0.5, bodyY);
+            ctx.lineTo(bodyX + 0.5, bodyY + bodyH);
+            ctx.moveTo(bodyX + bodyW - 0.5, bodyY);
+            ctx.lineTo(bodyX + bodyW - 0.5, bodyY + bodyH);
             ctx.stroke();
 
-            /* Linha horizontal entre aro e corpo */
-            ctx.beginPath();
-            ctx.moveTo(sx - 4, p.y + 20);
-            ctx.lineTo(sx + p.width + 4, p.y + 20);
-            ctx.stroke();
-
-            /* ====== TEXTO "vai ds" ====== */
-            if (p.hasText) {
-                this.drawPipeText(ctx, sx, p, pipeColor);
-            }
+            if (p.hasText) this.drawPipeText(ctx, sx, p, pipeColor);
         }
     }
 
-    /* ========================================================
-       TEXTO "vai ds" NOS TUBOS
-    ======================================================== */
     drawPipeText(ctx, sx, pipe, pipeColor) {
         const cx = sx + pipe.width / 2;
-        const cy = pipe.y + 20 + (pipe.height - 20) / 2;
+        const cy = pipe.y + 14 + (pipe.height - 14) / 2;
 
         ctx.save();
 
-        /* Fundo escuro para dar contraste */
-        const textW = 64;
-        const textH = 14;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        ctx.fillRect(cx - textW / 2, cy - textH / 2, textW, textH);
+        const textW = 44;
+        const textH = 11;
+        const boxX = cx - textW / 2;
+        const boxY = cy - textH / 2;
 
-        /* Borda decorativa dourada */
-        ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.fillRect(boxX, boxY, textW, textH);
+
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)';
         ctx.lineWidth = 1;
-        ctx.strokeRect(
-            cx - textW / 2 + 0.5,
-            cy - textH / 2 + 0.5,
-            textW - 1,
-            textH - 1
-        );
+        ctx.strokeRect(boxX + 0.5, boxY + 0.5, textW - 1, textH - 1);
 
-        /* Texto "vai ds" */
-        ctx.font = 'bold 9px "Press Start 2P", monospace';
+        ctx.font = 'bold 7px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        /* Sombra preta */
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
         ctx.fillText('vai ds', cx + 1, cy + 1);
 
-        /* Texto amarelo brilhante */
         ctx.fillStyle = '#FFD700';
-        ctx.shadowBlur = 4;
+        ctx.shadowBlur = 3;
         ctx.shadowColor = '#FFD700';
         ctx.fillText('vai ds', cx, cy);
 
         ctx.shadowBlur = 0;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
-
         ctx.restore();
     }
 

@@ -1,94 +1,58 @@
 /**
  * ============================================================
- * PLAYER.JS
- * ------------------------------------------------------------
- * Física e controle do jogador (Mario).
- *
- * Correção v1.1:
- *   - Colisão com tubos agora usa altura REAL (p.height),
- *     não mais 200 fixo. Isso corrige:
- *     • "parede invisível" em cima de tubos baixos
- *     • possibilidade de passar por baixo de tubos altos
+ * PLAYER.JS — com power-ups funcionais
  * ============================================================
  */
 "use strict";
 
 class Player {
     constructor(x, y) {
-        /* Posição e dimensões */
         this.x = x;
         this.y = y;
         this.width = CONFIG.PLAYER.WIDTH;
         this.height = CONFIG.PLAYER.HEIGHT_SMALL;
 
-        /* Física */
         this.vx = 0;
         this.vy = 0;
         this.isGrounded = false;
         this.facingRight = true;
 
-        /* Pulo */
         this.coyoteTimer = 0;
         this.jumpBufferTimer = 0;
         this.jumpHoldTimer = 0;
         this.jumpHeld = false;
 
-        /* Estado de poder */
         this.powerState = 'small';
         this.fireCooldown = 0;
         this.fireballs = [];
 
-        /* Dano */
         this.invulnerable = false;
         this.invulnerableTimer = 0;
         this.hurtTimer = 0;
 
-        /* Estrela */
         this.starTimer = 0;
         this.starActive = false;
 
-        /* Vida */
         this.lives = CONFIG.PLAYER.START_LIVES;
         this.dead = false;
         this.deadTimer = 0;
 
-        /* Animação */
         this.animFrame = 0;
         this.animTimer = 0;
         this.animState = 'idle';
 
-        /* Estatísticas */
         this.jumpCount = 0;
     }
 
-    /* ========================================================
-       HELPER: retângulo REAL do tubo (altura correta)
-    ======================================================== */
     getPipeRect(p) {
-        /* Altura real: usa p.height se existir.
-           Se não existir, calcula do topo até o chão.
-           Fallback final: 96. */
-        const h = p.height
-            ?? (CONFIG.CANVAS.GROUND_Y - p.y)
-            ?? 96;
-
-        return {
-            x: p.x,
-            y: p.y,
-            width: p.width,
-            height: h,
-        };
+        const h = p.height ?? (CONFIG.CANVAS.GROUND_Y - p.y) ?? 96;
+        return { x: p.x, y: p.y, width: p.width, height: h };
     }
 
-    /* ========================================================
-       UPDATE
-    ======================================================== */
     update(dt, keys, levelData, fireballs) {
         if (this.dead) return;
-
         this.fireballs = fireballs;
 
-        /* Timers */
         if (this.invulnerable) {
             this.invulnerableTimer -= dt;
             if (this.invulnerableTimer <= 0) this.invulnerable = false;
@@ -96,7 +60,6 @@ class Player {
         if (this.hurtTimer > 0) this.hurtTimer -= dt;
         if (this.fireCooldown > 0) this.fireCooldown -= dt;
 
-        /* Estrela */
         if (this.starActive) {
             this.starTimer -= dt;
             if (this.starTimer <= 0) {
@@ -110,7 +73,6 @@ class Player {
             }
         }
 
-        /* Controles */
         const left  = keys['ArrowLeft']  || keys['KeyA'];
         const right = keys['ArrowRight'] || keys['KeyD'];
         const jump  = keys['Space'] || keys['KeyZ'] || keys['ArrowUp'] || keys['KeyW'];
@@ -120,79 +82,47 @@ class Player {
         this.handleJump(dt, jump);
         if (shoot) this.shootFireball();
 
-        /* Gravidade */
         this.vy += CONFIG.CANVAS.GRAVITY;
-        if (this.vy > CONFIG.PLAYER.MAX_FALL_SPEED) {
-            this.vy = CONFIG.PLAYER.MAX_FALL_SPEED;
-        }
+        if (this.vy > CONFIG.PLAYER.MAX_FALL_SPEED) this.vy = CONFIG.PLAYER.MAX_FALL_SPEED;
 
-        /* Colisão X */
         this.x += this.vx;
         this.resolveCollisionsX(levelData);
 
-        /* Colisão Y */
         this.y += this.vy;
         const wasGrounded = this.isGrounded;
         this.isGrounded = false;
         this.resolveCollisionsY(levelData);
 
-        /* Coyote time */
         if (wasGrounded && !this.isGrounded && this.vy >= 0) {
             this.coyoteTimer = CONFIG.PLAYER.COYOTE_FRAMES / 60;
         }
         if (this.coyoteTimer > 0) this.coyoteTimer -= dt;
         if (this.isGrounded) this.coyoteTimer = 0;
 
-        /* Morte por queda */
-        if (this.y > levelData.groundY + 200) {
-            this.kill();
-        }
+        if (this.y > levelData.groundY + 200) this.kill();
 
         this.updateAnimation(dt);
     }
 
-    /* ========================================================
-       CONTROLE HORIZONTAL
-    ======================================================== */
     handleHorizontal(dt, left, right) {
         const onGround = this.isGrounded;
         const accel = CONFIG.PLAYER.ACCEL;
-        const friction = onGround
-            ? CONFIG.PLAYER.FRICTION
-            : CONFIG.PLAYER.AIR_FRICTION;
+        const friction = onGround ? CONFIG.PLAYER.FRICTION : CONFIG.PLAYER.AIR_FRICTION;
 
-        if (this.hurtTimer > 0) {
-            this.vx *= 0.95;
-            return;
-        }
+        if (this.hurtTimer > 0) { this.vx *= 0.95; return; }
 
-        if (left && !right) {
-            this.vx -= accel;
-            this.facingRight = false;
-        } else if (right && !left) {
-            this.vx += accel;
-            this.facingRight = true;
-        } else {
-            this.vx *= friction;
-            if (Math.abs(this.vx) < 0.05) this.vx = 0;
-        }
+        if (left && !right) { this.vx -= accel; this.facingRight = false; }
+        else if (right && !left) { this.vx += accel; this.facingRight = true; }
+        else { this.vx *= friction; if (Math.abs(this.vx) < 0.05) this.vx = 0; }
 
-        this.vx = Utils.clamp(
-            this.vx,
-            -CONFIG.PLAYER.MAX_SPEED,
-            CONFIG.PLAYER.MAX_SPEED
-        );
+        this.vx = Utils.clamp(this.vx, -CONFIG.PLAYER.MAX_SPEED, CONFIG.PLAYER.MAX_SPEED);
     }
 
-    /* ========================================================
-       PULO
-    ======================================================== */
     handleJump(dt, jumpPressed) {
         if (jumpPressed && !this.jumpHeld) {
             this.jumpBufferTimer = CONFIG.PLAYER.JUMP_BUFFER_FRAMES / 60;
         }
         this.jumpHeld = jumpPressed;
-
         if (this.jumpBufferTimer > 0) this.jumpBufferTimer -= dt;
 
         const canJump = this.isGrounded || this.coyoteTimer > 0;
@@ -208,12 +138,7 @@ class Player {
             if (this.powerState === 'small') SoundManager.playJump();
             else SoundManager.playBigJump();
 
-            EffectsManager.emitDust(
-                this.x + this.width / 2,
-                this.y + this.height,
-                5,
-                '#FFFFFF'
-            );
+            EffectsManager.emitDust(this.x + this.width / 2, this.y + this.height, 5, '#FFFFFF');
         }
 
         if (this.jumpHoldTimer > 0) {
@@ -226,12 +151,7 @@ class Player {
         }
     }
 
-    /* ========================================================
-       COLISÕES
-    ======================================================== */
-
     resolveCollisionsX(levelData) {
-        /* Plataformas */
         for (const p of levelData.platforms) {
             if (p.type === 'flagpole') continue;
             if (Utils.aabb(this, p)) {
@@ -240,8 +160,6 @@ class Player {
                 this.vx = 0;
             }
         }
-
-        /* Tubos — usa altura REAL */
         for (const p of levelData.pipes) {
             const r = this.getPipeRect(p);
             if (Utils.aabb(this, r)) {
@@ -253,19 +171,16 @@ class Player {
     }
 
     resolveCollisionsY(levelData) {
-        /* Chão (exceto nos gaps) */
         const inGap = levelData.gaps.some(g =>
             this.x + this.width / 2 >= g.x &&
             this.x + this.width / 2 <= g.x + g.width
         );
-
         if (!inGap && this.y + this.height >= levelData.groundY) {
             this.y = levelData.groundY - this.height;
             this.vy = 0;
             this.isGrounded = true;
         }
 
-        /* Plataformas */
         for (const p of levelData.platforms) {
             if (p.type === 'flagpole') continue;
             if (!Utils.aabb(this, p)) continue;
@@ -282,11 +197,7 @@ class Player {
                     this.hitQuestionBlock(p, levelData);
                 } else if (p.type === 'brick' && this.powerState !== 'small') {
                     p.broken = true;
-                    EffectsManager.emitExplosion(
-                        p.x + p.width / 2,
-                        p.y + p.height / 2,
-                        '#D32F2F'
-                    );
+                    EffectsManager.emitExplosion(p.x + p.width / 2, p.y + p.height / 2, '#D32F2F');
                     SoundManager.playStomp();
                 } else {
                     SoundManager.playStomp();
@@ -294,25 +205,30 @@ class Player {
             }
         }
 
-        /* Tubos — usa altura REAL */
         for (const p of levelData.pipes) {
             const r = this.getPipeRect(p);
             if (!Utils.aabb(this, r)) continue;
-
             if (this.vy > 0 && this.y + this.height - this.vy <= r.y + 8) {
-                /* Aterrissou em cima do tubo */
                 this.y = r.y - this.height;
                 this.vy = 0;
                 this.isGrounded = true;
             } else if (this.vy < 0) {
-                /* Bateu a cabeça por baixo */
                 this.y = r.y + r.height;
                 this.vy = 0;
             }
         }
     }
 
+    /* ========================================================
+       BLOCO DOURADO — libera item
+    ======================================================== */
     hitQuestionBlock(block, levelData) {
+        /* Bloco já usado? Não faz nada */
+        if (!block.item) {
+            SoundManager.playStomp();
+            return;
+        }
+
         SoundManager.playCoin();
 
         if (block.item === 'coin') {
@@ -322,31 +238,37 @@ class Player {
                 GAME.addCoin(1);
             }
         } else {
-            levelData.items.push(new Item(block.x + 4, block.y - 24, block.item));
-            EffectsManager.text(block.x + 16, block.y - 12, 'POWER!', {
-                color: '#FFF',
-                size: 10,
-            });
+            /* Cogumelo ou Fireflower */
+            const itemX = block.x + (block.width - 24) / 2;
+            const itemY = block.y - 24;
+            const newItem = new Item(itemX, itemY, block.item);
+            levelData.items.push(newItem);
+
+            /* Garante que o Game tenha referência também (caso tenha array separado) */
+            if (window.GAME && GAME.items && GAME.items !== levelData.items) {
+                GAME.items.push(newItem);
+            }
+
+            EffectsManager.text(
+                block.x + 16,
+                block.y - 20,
+                block.item === 'mushroom' ? 'CRESCER!' : 'FOGO!',
+                { color: '#FFF', size: 9, life: 1.0 }
+            );
         }
 
         block.item = null;
         block.type = 'used';
 
-        EffectsManager.emitSparkles(block.x + 16, block.y, 6, '#FFEB3B');
+        EffectsManager.emitSparkles(block.x + 16, block.y, 8, '#FFEB3B');
     }
 
-    /* ========================================================
-       DANO / PODER
-    ======================================================== */
     takeDamage(instantKill = false) {
         if (this.dead) return;
         if (this.invulnerable && !instantKill) return;
         if (this.starActive && !instantKill) return;
 
-        if (instantKill) {
-            this.kill();
-            return;
-        }
+        if (instantKill) { this.kill(); return; }
 
         if (this.powerState === 'fire') {
             this.powerState = 'super';
@@ -367,7 +289,6 @@ class Player {
         this.hurtTimer = 0.3;
         this.vx = this.facingRight ? -4 : 4;
         this.vy = -6;
-
         SoundManager.playPowerDown();
         EffectsManager.vignetteRed(0.5);
         EffectsManager.flashScreen('#FF0000', 0.4);
@@ -379,20 +300,17 @@ class Player {
         this.dead = true;
         this.vy = -10;
         this.vx = 0;
-
         SoundManager.stopMusic();
         SoundManager.playHit();
         EffectsManager.flashScreen('#FFF', 0.6);
-
-        if (window.GAME && GAME.onPlayerDeath) {
-            GAME.onPlayerDeath();
-        }
+        if (window.GAME && GAME.onPlayerDeath) GAME.onPlayerDeath();
     }
 
     /* ========================================================
        POWER-UPS
     ======================================================== */
     collectPowerUp(type) {
+        /* ===== COGUMELO → GIGANTE ===== */
         if (type === 'mushroom') {
             if (this.powerState === 'small') {
                 this.powerState = 'super';
@@ -401,20 +319,14 @@ class Player {
                 this.y -= (this.height - oldH);
             }
             SoundManager.playPowerUp();
-            EffectsManager.emitSparkles(
-                this.x + this.width / 2,
-                this.y + this.height / 2,
-                10,
-                '#4CAF50'
-            );
-            EffectsManager.text(
-                this.x + this.width / 2,
-                this.y - 10,
-                'SUPER!',
-                { color: '#4CAF50', size: 12 }
-            );
+            EffectsManager.emitSparkles(this.x + this.width / 2, this.y + this.height / 2, 12, '#4CAF50');
+            EffectsManager.text(this.x + this.width / 2, this.y - 10, 'SUPER!',
+                { color: '#4CAF50', size: 12, life: 1.2 });
+            return;
+        }
 
-        } else if (type === 'fireflower') {
+        /* ===== FLOR → FOGO ===== */
+        if (type === 'fireflower') {
             const oldH = this.height;
             this.powerState = 'fire';
             this.height = CONFIG.PLAYER.HEIGHT_BIG;
@@ -422,41 +334,23 @@ class Player {
                 this.y -= (this.height - oldH);
             }
             SoundManager.playPowerUp();
-            EffectsManager.emitSparkles(
-                this.x + this.width / 2,
-                this.y + this.height / 2,
-                12,
-                '#FF9800'
-            );
-            EffectsManager.text(
-                this.x + this.width / 2,
-                this.y - 10,
-                'FIRE!',
-                { color: '#FF9800', size: 12 }
-            );
+            EffectsManager.emitSparkles(this.x + this.width / 2, this.y + this.height / 2, 15, '#FF9800');
+            EffectsManager.text(this.x + this.width / 2, this.y - 10, 'FIRE!',
+                { color: '#FF9800', size: 12, life: 1.2 });
+            return;
+        }
 
-        } else if (type === 'star') {
+        /* ===== ESTRELA ===== */
+        if (type === 'star') {
             this.starActive = true;
             this.starTimer = 10.0;
             SoundManager.playPowerUp();
-            EffectsManager.emitSparkles(
-                this.x + this.width / 2,
-                this.y + this.height / 2,
-                15,
-                '#FFD700'
-            );
-            EffectsManager.text(
-                this.x + this.width / 2,
-                this.y - 10,
-                'INVENCÍVEL!',
-                { color: '#FFD700', size: 12, life: 1.5 }
-            );
+            EffectsManager.emitSparkles(this.x + this.width / 2, this.y + this.height / 2, 18, '#FFD700');
+            EffectsManager.text(this.x + this.width / 2, this.y - 10, 'INVENCÍVEL!',
+                { color: '#FFD700', size: 12, life: 1.5 });
         }
     }
 
-    /* ========================================================
-       TIRO
-    ======================================================== */
     shootFireball() {
         if (this.powerState !== 'fire') return;
         if (this.fireCooldown > 0) return;
@@ -464,9 +358,7 @@ class Player {
         if (this.fireballs.length >= 2) return;
 
         const x = this.facingRight ? this.x + this.width : this.x - 10;
-        const vx = this.facingRight
-            ? CONFIG.ITEM.FIREBALL_SPEED_X
-            : -CONFIG.ITEM.FIREBALL_SPEED_X;
+        const vx = this.facingRight ? CONFIG.ITEM.FIREBALL_SPEED_X : -CONFIG.ITEM.FIREBALL_SPEED_X;
 
         this.fireballs.push(new Fireball(x, this.y + 12, vx, 'player'));
         this.fireCooldown = CONFIG.PLAYER.FIRE_COOLDOWN;
@@ -474,42 +366,26 @@ class Player {
         EffectsManager.emitSparkles(x, this.y + 12, 4, '#FF6D00');
     }
 
-    /* ========================================================
-       ANIMAÇÃO
-    ======================================================== */
     updateAnimation(dt) {
         const absVx = Math.abs(this.vx);
-
-        if (!this.isGrounded) {
-            this.animState = 'jump';
-        } else if (absVx > 0.5) {
+        if (!this.isGrounded) this.animState = 'jump';
+        else if (absVx > 0.5) {
             const movingRight = this.vx > 0;
             this.animState = (movingRight !== this.facingRight) ? 'skid' : 'walk';
-        } else {
-            this.animState = 'idle';
-        }
+        } else this.animState = 'idle';
 
         this.animTimer += dt;
-        const frameSpeed = this.animState === 'walk'
-            ? Math.max(0.04, 0.12 - absVx * 0.015)
-            : 0.15;
-
+        const frameSpeed = this.animState === 'walk' ? Math.max(0.04, 0.12 - absVx * 0.015) : 0.15;
         if (this.animTimer > frameSpeed) {
             this.animTimer = 0;
             this.animFrame = (this.animFrame + 1) % 4;
         }
     }
 
-    /* ========================================================
-       DRAW
-    ======================================================== */
     draw(ctx, cameraX) {
         if (this.invulnerable && Math.floor(Date.now() / 80) % 2 === 0) return;
 
-        const starPhase = this.starActive
-            ? Math.floor(Date.now() / 60) % 6
-            : -1;
-
+        const starPhase = this.starActive ? Math.floor(Date.now() / 60) % 6 : -1;
         const sx = this.x - cameraX;
 
         ctx.save();
@@ -522,20 +398,14 @@ class Player {
 
         const colors = this.getColors(starPhase);
         this.drawMario(ctx, colors, starPhase);
-
         ctx.restore();
     }
 
     getColors(starPhase) {
         const base = {
-            cap:     '#D32F2F',
-            capDark: '#B71C1C',
-            skin:    '#FFCC80',
-            hair:    '#3E2723',
-            shirt:   '#D32F2F',
-            overall: '#1976D2',
-            shoe:    '#3E2723',
-            button:  '#FFD700',
+            cap: '#D32F2F', capDark: '#B71C1C', skin: '#FFCC80',
+            hair: '#3E2723', shirt: '#D32F2F', overall: '#1976D2',
+            shoe: '#3E2723', button: '#FFD700',
         };
 
         if (this.powerState === 'fire') {
@@ -561,23 +431,19 @@ class Player {
         const big = (this.powerState !== 'small');
         const scaleY = big ? 1.4 : 1;
 
-        /* Boné */
         ctx.fillStyle = c.cap;
         ctx.fillRect(2, 0, 18, 8 * scaleY);
         ctx.fillRect(8, 2 * scaleY, 14, 4);
         ctx.fillStyle = c.capDark;
         ctx.fillRect(2, 6 * scaleY, 18, 2);
 
-        /* Rosto */
         ctx.fillStyle = c.skin;
         ctx.fillRect(4, 8 * scaleY, 14, 10);
 
-        /* Cabelo */
         ctx.fillStyle = c.hair;
         ctx.fillRect(4, 8 * scaleY, 3, 2);
         ctx.fillRect(15, 8 * scaleY, 3, 2);
 
-        /* Olho */
         ctx.fillStyle = '#000';
         if (this.animState === 'idle' || this.animState === 'walk') {
             ctx.fillRect(13, 10 * scaleY, 2, 3);
@@ -585,24 +451,19 @@ class Player {
             ctx.fillRect(13, 11 * scaleY, 2, 1);
         }
 
-        /* Bigode */
         ctx.fillStyle = c.hair;
         ctx.fillRect(10, 13 * scaleY, 8, 3);
 
-        /* Camisa */
         ctx.fillStyle = c.shirt;
         ctx.fillRect(4, 18 * scaleY, 16, 6);
 
-        /* Macacão */
         ctx.fillStyle = c.overall;
         ctx.fillRect(4, 22 * scaleY, 16, H - 24 - (big ? 6 : 0));
 
-        /* Botões */
         ctx.fillStyle = c.button;
         ctx.fillRect(6, 19 * scaleY, 2, 2);
         ctx.fillRect(16, 19 * scaleY, 2, 2);
 
-        /* Braços */
         ctx.fillStyle = c.shirt;
         if (this.animState === 'jump') {
             ctx.fillRect(0, 16 * scaleY, 4, 6);
@@ -616,15 +477,12 @@ class Player {
             ctx.fillRect(20, 18 * scaleY, 4, 6);
         }
 
-        /* Mãos */
         ctx.fillStyle = '#FFF';
         ctx.fillRect(0, 24 * scaleY, 4, 3);
         ctx.fillRect(20, 24 * scaleY, 4, 3);
 
-        /* Sapatos */
         const shoeY = H - 6;
         ctx.fillStyle = c.shoe;
-
         if (this.animState === 'jump') {
             ctx.fillRect(0, shoeY - 2, 9, 6);
             ctx.fillRect(15, shoeY - 4, 9, 6);
@@ -644,10 +502,7 @@ class Player {
     get isStarPowered() { return this.starActive; }
     get isFire() { return this.powerState === 'fire'; }
     get isBig() { return this.powerState !== 'small'; }
-
-    getRect() {
-        return { x: this.x, y: this.y, width: this.width, height: this.height };
-    }
+    getRect() { return { x: this.x, y: this.y, width: this.width, height: this.height }; }
 }
 
 window.Player = Player;

@@ -2,18 +2,13 @@
  * ============================================================
  * SAVE.JS
  * ------------------------------------------------------------
- * Sistema de persistência usando localStorage.
- * Guarda: progresso, vidas, moedas, fases desbloqueadas,
- * configurações e estatísticas.
+ * Persistência em localStorage + validação de saves antigos.
  * ============================================================
  */
 "use strict";
 
 const SAVE = {
 
-    /* ========================================================
-       CONFIGURAÇÕES
-    ======================================================== */
     key: 'superRetroSave_v1',
     version: 1,
 
@@ -52,39 +47,33 @@ const SAVE = {
     },
 
     /* ========================================================
-       CARREGAR
+       GET (com merge)
     ======================================================== */
-
     get() {
         try {
             const raw = localStorage.getItem(this.key);
             if (!raw) return this.defaultData();
-
             const data = JSON.parse(raw);
             return this.merge(this.defaultData(), data);
         } catch (err) {
-            console.error('[SAVE] Erro ao ler:', err);
-            return this.defaultData();
+            const fallback = this.defaultData();
+            try {
+                localStorage.setItem(this.key, JSON.stringify(fallback));
+            } catch (storageError) {
+                return fallback;
+            }
+            return fallback;
         }
     },
 
-    /**
-     * Mescla recursiva: preenche campos ausentes com defaults.
-     * Preserva dados do save que ainda existem.
-     */
     merge(defaults, saved) {
         const result = { ...defaults };
         for (const key of Object.keys(defaults)) {
             const defVal = defaults[key];
             const savVal = saved[key];
-
             if (savVal === undefined) continue;
 
-            if (
-                typeof defVal === 'object' &&
-                defVal !== null &&
-                !Array.isArray(defVal)
-            ) {
+            if (typeof defVal === 'object' && defVal !== null && !Array.isArray(defVal)) {
                 result[key] = this.merge(defVal, savVal);
             } else {
                 result[key] = savVal;
@@ -94,9 +83,64 @@ const SAVE = {
     },
 
     /* ========================================================
-       SALVAR
+       VALIDATE — corrige saves antigos/corrompidos
     ======================================================== */
+    validate() {
+        const data = this.get();
+        let changed = false;
 
+        /* Vidas entre 1 e 99 */
+        if (!Number.isInteger(data.player.lives) ||
+            data.player.lives < 1 ||
+            data.player.lives > 99) {
+            data.player.lives = CONFIG.PLAYER.START_LIVES;
+            changed = true;
+        }
+
+        /* Fase válida */
+        if (!Number.isInteger(data.player.currentLevel) ||
+            data.player.currentLevel < 1 ||
+            data.player.currentLevel > CONFIG.GAME.LEVELS_TOTAL) {
+            data.player.currentLevel = 1;
+            changed = true;
+        }
+
+        /* Score e moedas numéricos */
+        if (!Number.isFinite(data.player.score)) {
+            data.player.score = 0;
+            changed = true;
+        }
+        if (!Number.isFinite(data.player.coins)) {
+            data.player.coins = 0;
+            changed = true;
+        }
+
+        /* PowerState válido */
+        const validPowers = ['small', 'super', 'fire'];
+        if (!validPowers.includes(data.player.powerState)) {
+            data.player.powerState = 'small';
+            changed = true;
+        }
+
+        /* Progresso */
+        if (!Number.isInteger(data.progress.unlockedLevel) ||
+            data.progress.unlockedLevel < 1 ||
+            data.progress.unlockedLevel > CONFIG.GAME.LEVELS_TOTAL) {
+            data.progress.unlockedLevel = 1;
+            changed = true;
+        }
+
+        if (changed) {
+            this.save(data);
+            console.log('[SAVE] Save validado e corrigido.');
+        }
+
+        return data;
+    },
+
+    /* ========================================================
+       SAVE
+    ======================================================== */
     save(data = null) {
         try {
             const payload = data || this.get();
@@ -110,10 +154,6 @@ const SAVE = {
         }
     },
 
-    /**
-     * Coleta dados do jogo atual (GAME, player) e salva.
-     * Chamado periodicamente e em eventos-chave.
-     */
     collect(game) {
         const data = this.get();
 
@@ -136,9 +176,8 @@ const SAVE = {
     },
 
     /* ========================================================
-       HELPERS DE PROGRESSO
+       HELPERS
     ======================================================== */
-
     setLives(n) {
         const data = this.get();
         data.player.lives = Math.max(0, n);
@@ -165,7 +204,7 @@ const SAVE = {
         data.player.coins += n;
         data.stats.totalCoins += n;
 
-        // 100 moedas → 1 vida
+        /* 100 moedas → 1 vida */
         if (data.player.coins >= 100) {
             const extra = Math.floor(data.player.coins / 100);
             data.player.lives += extra;
@@ -190,9 +229,8 @@ const SAVE = {
     },
 
     /* ========================================================
-       PROGRESSO DE FASES
+       PROGRESSO
     ======================================================== */
-
     unlockLevel(level) {
         const data = this.get();
         if (level > data.progress.unlockedLevel) {
@@ -228,7 +266,6 @@ const SAVE = {
     /* ========================================================
        CONFIGURAÇÕES
     ======================================================== */
-
     getSettings() {
         return this.get().settings;
     },
@@ -242,7 +279,6 @@ const SAVE = {
     /* ========================================================
        ESTATÍSTICAS
     ======================================================== */
-
     getStats() {
         return this.get().stats;
     },
@@ -250,7 +286,6 @@ const SAVE = {
     /* ========================================================
        UTILITÁRIOS
     ======================================================== */
-
     exists() {
         return localStorage.getItem(this.key) !== null;
     },
@@ -260,7 +295,6 @@ const SAVE = {
         console.log('[SAVE] Save apagado.');
     },
 
-    /** Retorna o save como string base64 (para exportar). */
     export() {
         try {
             return btoa(encodeURIComponent(JSON.stringify(this.get())));
@@ -270,7 +304,6 @@ const SAVE = {
         }
     },
 
-    /** Importa save de uma string base64. */
     import(code) {
         try {
             const json = decodeURIComponent(atob(code));
@@ -292,5 +325,8 @@ const SAVE = {
         console.table(d.settings);
     },
 };
+
+/* Valida o save assim que o arquivo carrega */
+SAVE.validate();
 
 window.SAVE = SAVE;

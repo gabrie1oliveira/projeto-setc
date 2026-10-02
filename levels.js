@@ -2,17 +2,17 @@
  * ============================================================
  * LEVELS.JS
  * ------------------------------------------------------------
- * Banco de dados das fases.
- * Tubos agora têm altura real explícita (usada pela colisão).
+ * Blocos dourados (question) com power-ups:
+ *   - item: 'mushroom'    → Mario GIGANTE
+ *   - item: 'fireflower'  → Mario com FOGO
+ *   - item: 'coin'        → moeda
  * ============================================================
  */
 "use strict";
 
 const LEVELS = {
 
-    /* ========================================================
-       FASE 1 — Overworld
-    ======================================================== */
+    /* ===== FASE 1 ===== */
     1: {
         id: '1-1',
         name: 'Mundo 1-1',
@@ -21,47 +21,42 @@ const LEVELS = {
         groundY: CONFIG.CANVAS.GROUND_Y,
 
         gaps: [
-            { x: 960, width: 96 },
+            { x: 960,  width: 96 },
             { x: 1920, width: 128 },
-            { x: 2700, width: 96 },
+            { x: 2720, width: 96 },
         ],
 
         platforms: [
-            { x: 256, y: 284, width: 32, height: 32, type: 'brick' },
+            /* Bloco de cogumelo (Mario gigante) */
             { x: 288, y: 284, width: 32, height: 32, type: 'question', item: 'mushroom' },
-            { x: 320, y: 284, width: 32, height: 32, type: 'brick' },
-            { x: 352, y: 284, width: 32, height: 32, type: 'question', item: 'coin' },
-            { x: 384, y: 284, width: 32, height: 32, type: 'brick' },
-
+            /* Bloco de flor de fogo */
             { x: 320, y: 188, width: 32, height: 32, type: 'question', item: 'fireflower' },
+            /* Blocos de moeda */
+            { x: 352, y: 284, width: 32, height: 32, type: 'question', item: 'coin' },
+            { x: 704, y: 284, width: 32, height: 32, type: 'question', item: 'coin' },
+            { x: 2560, y: 240, width: 32, height: 32, type: 'question', item: 'coin' },
 
+            /* Blocos comuns */
+            { x: 256, y: 284, width: 32, height: 32, type: 'brick' },
+            { x: 320, y: 284, width: 32, height: 32, type: 'brick' },
+            { x: 384, y: 284, width: 32, height: 32, type: 'brick' },
             { x: 640, y: 284, width: 32, height: 32, type: 'brick' },
             { x: 672, y: 284, width: 32, height: 32, type: 'brick' },
-            { x: 704, y: 284, width: 32, height: 32, type: 'question', item: 'coin' },
             { x: 736, y: 284, width: 32, height: 32, type: 'brick' },
-
             { x: 1280, y: 284, width: 128, height: 32, type: 'brick' },
             { x: 1440, y: 220, width: 96, height: 32, type: 'brick' },
             { x: 1600, y: 284, width: 96, height: 32, type: 'brick' },
-
             { x: 2400, y: 240, width: 128, height: 32, type: 'brick' },
-            { x: 2560, y: 240, width: 32, height: 32, type: 'question', item: 'coin' },
 
             { x: 3150, y: 124, width: 16, height: 256, type: 'flagpole' },
             { x: 3220, y: 320, width: 64, height: 60, type: 'castle' },
         ],
 
-        /* ================================================
-           TUBOS
-           y     = topo do tubo
-           height = altura TOTAL (do topo até o chão)
-           hasText = desenha "vai ds" no tubo
-        ================================================ */
         pipes: [
-            { x: 480,  y: 316, width: 64, height: 64,  hasText: true  },
-            { x: 700,  y: 284, width: 64, height: 96,  hasText: true  },
-            { x: 1400, y: 316, width: 64, height: 64,  hasText: true  },
-            { x: 2200, y: 284, width: 64, height: 96,  hasText: false },
+            { x: 480,  y: 340, width: 64, height: 40, hasText: true  },
+            { x: 700,  y: 316, width: 64, height: 64, hasText: true  },
+            { x: 1400, y: 340, width: 64, height: 40, hasText: true  },
+            { x: 2200, y: 316, width: 64, height: 64, hasText: false },
         ],
 
         enemies: [
@@ -85,9 +80,7 @@ const LEVELS = {
         hasBoss: false,
     },
 
-    /* ========================================================
-       FASE 2 — Subterrâneo
-    ======================================================== */
+    /* ===== FASE 2 ===== */
     2: {
         id: '1-2',
         name: 'Mundo 1-2 (Subterrâneo)',
@@ -96,30 +89,35 @@ const LEVELS = {
         groundY: CONFIG.CANVAS.GROUND_Y,
 
         gaps: [
-            { x: 1100, width: 160 },
-            { x: 2200, width: 130 },
+            { x: 1088, width: 96 },
+            { x: 2208, width: 96 },
         ],
 
         platforms: [
+            /* Bloco de flor de fogo */
+            { x: 450, y: 252, width: 64, height: 32, type: 'question', item: 'fireflower' },
+            /* Bloco de cogumelo */
+            { x: 2600, y: 240, width: 32, height: 32, type: 'question', item: 'mushroom' },
+            /* Blocos de moeda */
+            { x: 1000, y: 240, width: 32, height: 32, type: 'question', item: 'coin' },
+
+            /* Blocos comuns */
             { x: 200,  y: 284, width: 96,  height: 32, type: 'brick' },
-            { x: 450,  y: 252, width: 64,  height: 32, type: 'question', item: 'fireflower' },
             { x: 600,  y: 220, width: 128, height: 32, type: 'brick' },
             { x: 800,  y: 284, width: 160, height: 32, type: 'brick' },
-            { x: 1000, y: 240, width: 32,  height: 32, type: 'question', item: 'coin' },
             { x: 1450, y: 252, width: 96,  height: 32, type: 'brick' },
             { x: 1700, y: 220, width: 128, height: 32, type: 'brick' },
             { x: 1900, y: 284, width: 128, height: 32, type: 'brick' },
             { x: 2400, y: 240, width: 96,  height: 32, type: 'brick' },
-            { x: 2600, y: 240, width: 32,  height: 32, type: 'question', item: 'mushroom' },
 
             { x: 2800, y: 124, width: 16, height: 256, type: 'flagpole' },
             { x: 2870, y: 320, width: 64, height: 60,  type: 'castle' },
         ],
 
         pipes: [
-            { x: 350,  y: 284, width: 64, height: 96,  hasText: true  },
-            { x: 1250, y: 252, width: 64, height: 128, hasText: true  },
-            { x: 2000, y: 284, width: 64, height: 96,  hasText: false },
+            { x: 352,  y: 316, width: 64, height: 64, hasText: true  },
+            { x: 1248, y: 284, width: 64, height: 96, hasText: true  },
+            { x: 2000, y: 316, width: 64, height: 64, hasText: false },
         ],
 
         enemies: [
@@ -143,9 +141,7 @@ const LEVELS = {
         hasBoss: false,
     },
 
-    /* ========================================================
-       FASE 3 — Castelo com BOSS
-    ======================================================== */
+    /* ===== FASE 3 ===== */
     3: {
         id: '1-3',
         name: 'Mundo 1-3 (Castelo)',
@@ -154,28 +150,33 @@ const LEVELS = {
         groundY: CONFIG.CANVAS.GROUND_Y,
 
         gaps: [
-            { x: 800,  width: 160 },
-            { x: 1400, width: 160 },
-            { x: 2000, width: 128 },
+            { x: 800,  width: 96 },
+            { x: 1408, width: 96 },
+            { x: 2016, width: 96 },
         ],
 
         platforms: [
+            /* Bloco de cogumelo antes do boss */
             { x: 300,  y: 284, width: 64,  height: 32, type: 'question', item: 'mushroom' },
+            /* Bloco de flor de fogo antes do boss */
+            { x: 1300, y: 190, width: 32,  height: 32, type: 'question', item: 'fireflower' },
+            /* Bloco de moeda */
+            { x: 2450, y: 240, width: 32,  height: 32, type: 'question', item: 'coin' },
+
+            /* Blocos comuns */
             { x: 500,  y: 220, width: 128, height: 32, type: 'brick' },
             { x: 700,  y: 284, width: 64,  height: 32, type: 'brick' },
             { x: 1100, y: 252, width: 128, height: 32, type: 'brick' },
-            { x: 1300, y: 190, width: 32,  height: 32, type: 'question', item: 'fireflower' },
             { x: 1700, y: 252, width: 128, height: 32, type: 'brick' },
             { x: 1900, y: 220, width: 96,  height: 32, type: 'brick' },
             { x: 2300, y: 240, width: 128, height: 32, type: 'brick' },
-            { x: 2450, y: 240, width: 32,  height: 32, type: 'question', item: 'coin' },
 
-            { x: 2600, y: 124, width: 16, height: 256, type: 'flagpole' },
+            { x: 2700, y: 124, width: 16, height: 256, type: 'flagpole' },
         ],
 
         pipes: [
-            { x: 450,  y: 316, width: 64, height: 64, hasText: true  },
-            { x: 1550, y: 316, width: 64, height: 64, hasText: true  },
+            { x: 450,  y: 340, width: 64, height: 40, hasText: true },
+            { x: 1552, y: 340, width: 64, height: 40, hasText: true },
         ],
 
         enemies: [
@@ -196,29 +197,20 @@ const LEVELS = {
         ],
 
         items: [],
+
         hasBoss: true,
-        bossSpawn: { x: 2000, y: 316, minX: 1700, maxX: 2500 },
+        bossSpawn: { x: 2150, y: 316, minX: 1900, maxX: 2400 },
     },
 };
 
-/* ============================================================
-   GERENCIADOR DE FASES
-============================================================ */
 const WorldManager = {
     currentId: 1,
-
     getLevel(id) {
         const raw = LEVELS[id] || LEVELS[1];
         return JSON.parse(JSON.stringify(raw));
     },
-
-    get total() {
-        return Object.keys(LEVELS).length;
-    },
-
-    hasNext(id) {
-        return id < this.total;
-    },
+    get total() { return Object.keys(LEVELS).length; },
+    hasNext(id) { return id < this.total; },
 };
 
 window.LEVELS = LEVELS;
